@@ -208,6 +208,11 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
   }
 
   /* ---------- administrators ---------- */
+  var EVENT_LABELS = { created: '建立案件', status_change: '更新狀態', note: '處理紀錄', protection: '保護措施', finding: '調查結果', extend_due: '延長期限', authority_received: '標記已通知／登錄主管機關', authority_result: '標記已通知／登錄處理結果', recuse: '迴避', recused: '迴避' };
+  var ACTION_LABELS = { list_cases: '查看案件清單', view_case: '查看案件', download_evidence: '查看證據', upload_evidence: '上傳證據', evidence_upload: '上傳證據', create_case: '代建案件', view_log: '查看操作紀錄', admin_ping: '開啟管理頁', anon_create: '匿名通報', anon_supplement: '匿名補件', anon_rate_limited: '匿名通報達到上限', named_create: '具名申訴', named_supplement: '具名補件', add_note: '新增紀錄', set_status: '更新狀態', mark_authority: '標記主管機關', recuse: '迴避' };
+  var STATUS_NAMES = { received: '已收到', accepted: '已受理', not_accepted: '不予受理', protecting: '採取保護措施中', mediating: '協調中', investigating: '調查中', decided: '已作成決定', closed: '已結案', reconsideration: '申復處理中', recused: '已迴避' };
+  function when(t) { return String(t || '').slice(0, 16).replace('T', ' '); }
+  function who_(a) { return String(a).replace(/^admin:(.{6}).*/, '管理員 $1').replace(/^denied:(.{6}).*/, '未授權者 $1').replace('complainant', '申訴人').replace('anonymous', '匿名者'); }
   function adminHome() {
     var list = h('div', { text: '載入中…' }), err = h('div', { class: 'err', role: 'alert' }), warn = h('div');
     screen(h('h1', { text: '申訴案件管理' }), warn,
@@ -268,12 +273,12 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
         if (why) run(recuse, err, function () { return call('cpAdminRecuse', idToken, id, why).then(adminHome); });
       };
       var evts = h('div');
-      c.events.slice().reverse().forEach(function (e) { evts.appendChild(h('p', { class: 'pre', text: String(e.at).slice(0, 16).replace('T', ' ') + '｜' + e.type + (e.to_status ? ' → ' + e.to_status : '') + (e.note ? '\n' + e.note : '') + (e.public_note ? '\n（對申訴人）' + e.public_note : '') })); });
+      c.events.slice().reverse().forEach(function (e) { evts.appendChild(h('p', { class: 'pre', text: when(e.at) + '｜' + (EVENT_LABELS[e.type] || e.type) + (e.to_status ? ' → ' + (STATUS_NAMES[e.to_status] || e.to_status) : '') + (e.note ? '\n' + e.note : '') + (e.public_note ? '\n（對申訴人）' + e.public_note : '') })); });
       var sup = h('div');
       c.supplements.forEach(function (s) { sup.appendChild(h('p', { class: 'pre', text: String(s.created_at).slice(0, 10) + '：' + s.text })); });
       screen(h('button', { class: 'alt', text: '回到案件清單', onclick: adminHome }),
-        h('section', { class: 'card' }, h('h2', { text: id }), dl([['類別', c.categoryLabel], ['狀態', c.statusLabel], ['收件方式', { named: '具名', anonymous: '匿名通報（非正式申訴）', admin_created: '代建' }[k.intake_type]], ['所屬公司', k.employer_entity], ['收件', k.received_at], ['受理', k.accepted_at], ['結案期限', k.extended_due_at || k.due_at], ['結案', k.closed_at]])),
-        who ? h('section', { class: 'card' }, h('h2', { text: '申訴人' }), dl([['姓名', who.complainant_name], ['服務單位及職稱', who.unit_title], ['住居所', who.address], ['聯絡電話', who.phone], ['代理人', who.agent_info], ['簽名時間', who.signed_at]])) : null,
+        h('section', { class: 'card' }, h('h2', { text: id }), dl([['類別', c.categoryLabel], ['狀態', c.statusLabel], ['收件方式', { named: '具名', anonymous: '匿名通報（非正式申訴）', admin_created: '代建' }[k.intake_type]], ['所屬公司', k.employer_entity], ['收件', when(k.received_at)], ['受理', when(k.accepted_at)], ['結案期限', k.extended_due_at || k.due_at], ['結案', when(k.closed_at)]])),
+        who ? h('section', { class: 'card' }, h('h2', { text: '申訴人' }), dl([['姓名', who.complainant_name], ['服務單位及職稱', who.unit_title], ['住居所', who.address], ['聯絡電話', who.phone], ['代理人', who.agent_info], ['簽名時間', when(who.signed_at)]])) : null,
         h('section', { class: 'card' }, h('h2', { text: '事件內容' }), dl([['日期', d.incident_date], ['時間', d.incident_time], ['地點', d.location], ['被申訴對象', d.respondent], ['事件經過', d.narrative], ['證人', d.witnesses], ['其他', d.other_info]])),
         c.supplements.length ? h('section', { class: 'card' }, h('h2', { text: '補件' }), sup) : null,
         c.attachments.length ? h('section', { class: 'card' }, h('h2', { text: '證據' }), atts) : null,
@@ -308,7 +313,7 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
     call('cpAdminLog', idToken, 100).then(function (r) {
       box.textContent = '';
       box.appendChild(h('p', { text: r.intact ? '紀錄完整性檢查：通過' : '紀錄完整性檢查：未通過，可能遭到更動' }));
-      r.rows.forEach(function (x) { box.appendChild(h('p', { class: 'muted pre', text: String(x.at).slice(0, 16).replace('T', ' ') + '｜' + x.actor + '｜' + x.action + (x.caseId ? '｜' + x.caseId : '') + (x.result !== 'ok' ? '｜' + x.result : '') })); });
+      r.rows.forEach(function (x) { box.appendChild(h('p', { class: 'muted pre', text: when(x.at) + '｜' + who_(x.actor) + '｜' + (ACTION_LABELS[x.action] || EVENT_LABELS[x.action] || x.action) + (x.caseId ? '｜' + x.caseId : '') + (x.result !== 'ok' ? '｜' + (x.result === 'denied' ? '已拒絕' : x.result) : '') })); });
     }).catch(function (e) { box.textContent = e.message; });
   }
   function notAdmin(message) {
