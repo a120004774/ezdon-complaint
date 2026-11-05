@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>員工申訴</title>
+<style>
+:root{--ink:#1f2a33;--muted:#5d6b76;--line:#d5dce1;--accent:#22577a;--bad:#a4262c}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 -apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;color:var(--ink);background:#f5f7f8}
+main{max-width:640px;margin:0 auto;padding:16px 16px 48px}
+h1{font-size:22px;margin:8px 0 4px}h2{font-size:18px;margin:0 0 8px}h3{font-size:16px;margin:14px 0 4px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.note{background:#fff6e0;border:1px solid #d9a521;border-radius:10px;padding:12px 14px;margin:12px 0}
+.test{background:var(--bad);color:#fff;text-align:center;padding:4px;font-size:14px}
+label{display:block;font-weight:600;margin:14px 0 4px}
+.hint{font-weight:400;color:var(--muted);font-size:14px}
+input[type=text],input[type=tel],input[type=date],input[type=time],select,textarea{width:100%;font:inherit;padding:10px;border:1px solid #aab6be;border-radius:8px;background:#fff}
+textarea{min-height:110px;resize:vertical}
+button{width:100%;min-height:46px;font:inherit;font-weight:600;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;padding:10px;margin-top:12px}
+button.alt{background:#fff;color:var(--accent)}
+button.danger{background:#fff;color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.55}
+.err{color:var(--bad);font-weight:600;margin-top:10px}
+.row{display:block;width:100%;text-align:left;font-weight:400;background:#fff;color:var(--ink);border:1px solid var(--line);margin:8px 0}
+.row strong{color:var(--accent)}
+.muted{color:var(--muted);font-size:14px}
+.pre{white-space:pre-wrap;word-break:break-word}
+dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;white-space:pre-wrap;word-break:break-word}
+canvas{display:block;width:100%;height:160px;border:1px solid #aab6be;border-radius:8px;background:#fff;touch-action:none}
+img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);border-radius:8px}
+.tabs{display:flex;gap:8px}.tabs button{margin-top:8px}
+[hidden]{display:none!important}
+</style>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+<div class="test" id="envBanner" hidden>測試環境：請只輸入假資料</div>
+<main id="root"><p class="muted" id="boot">載入中…</p></main>
+<script>
+(function () {
+  'use strict';
+  var API_URL = 'https://script.google.com/macros/s/AKfycbwThZIsyDU-NLlrtk7yES3jy3y3MdOzq1B2KN45Lx5RRZjro7d85BhCGFymLpGOB-Kx/exec', LIFF_ID = '2012353880-tHRiRcUu';
+  var root = document.getElementById('root');
+  var idToken = '', info = null;
+
+  /* Builds elements with text only, so nothing a person typed can run as code. */
+  function h(tag, props) {
+    var e = document.createElement(tag);
+    Object.keys(props || {}).forEach(function (k) {
+      if (k === 'text') e.textContent = props[k];
+      else if (k.indexOf('on') === 0) e[k] = props[k];
+      else if (k === 'class') e.className = props[k];
+      else if (k === 'hidden' || k === 'disabled' || k === 'multiple') e[k] = !!props[k];
+      else e.setAttribute(k, props[k]);
+    });
+    [].slice.call(arguments, 2).forEach(function (c) { if (c) e.appendChild(c); });
+    return e;
+  }
+  function screen() {
+    root.textContent = '';
+    [].slice.call(arguments).forEach(function (c) { if (c) root.appendChild(c); });
+    window.scrollTo(0, 0);
+  }
+  function call(fn) {
+    var args = [].slice.call(arguments, 1);
+    return fetch(API_URL, { method: 'POST', redirect: 'follow', credentials: 'omit', referrerPolicy: 'no-referrer', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+      .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) throw new Error(j.error); return j.result; });
+  }
+  function run(btn, errBox, promiseFn, busyText) {
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = busyText || '處理中…'; errBox.textContent = '';
+    return Promise.resolve().then(promiseFn).catch(function (e) { errBox.textContent = e.message || '發生錯誤，請稍後再試'; })
+      .then(function () { btn.disabled = false; btn.textContent = label; });
+  }
+  function field(label, input, hint) {
+    return h('div', null, h('label', { text: label }, hint ? h('span', { class: 'hint', text: ' ' + hint }) : null), input);
+  }
+  function options(pairs) {
+    var s = h('select');
+    s.appendChild(h('option', { value: '', text: '請選擇' }));
+    pairs.forEach(function (p) { s.appendChild(h('option', { value: p[0], text: p[1] })); });
+    return s;
+  }
+  function toB64(blob) {
+    return new Promise(function (ok, no) { var r = new FileReader(); r.onload = function () { ok(String(r.result).split(',')[1]); }; r.onerror = no; r.readAsDataURL(blob); });
+  }
+  function cleanImage(file) {
+    return new Promise(function (ok, no) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, 2000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? ok(b) : no(new Error('照片無法處理')); }, 'image/jpeg', 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); no(new Error('照片無法處理')); };
+      img.src = url;
+    });
+  }
+  function uploadAll(files, send) {
+    var failed = 0;
+    return Array.prototype.reduce.call(files, function (chain, f) {
+      return chain.then(function () {
+        return (f.type.indexOf('image/') === 0 ? cleanImage(f) : Promise.resolve(f)).then(toB64).then(send).catch(function () { failed++; });
+      });
+    }, Promise.resolve()).then(function () { return failed; });
+  }
+  function externalCard(ext) {
+    var list = h('div');
+    ext.channels.forEach(function (c) { list.appendChild(h('p', { text: c.name + '：' + c.phone + (c.address ? '（' + c.address + '）' : '') })); });
+    return h('section', { class: 'card' }, h('h2', { text: '請直接向主管機關申訴' }), h('p', { text: ext.note }), list, h('p', { class: 'hint', text: '你沒有送出任何內容，本系統也沒有保存任何資料。' }));
+  }
+
+  /* ---------- complainant ---------- */
+  function complainantHome() {
+    var err = h('div', { class: 'err', role: 'alert' }), list = h('div');
+    screen(h('h1', { text: '具名正式申訴' }),
+      h('div', { class: 'note', text: '資料由 Vincent 持有，Vincent 與 Angela 為處理人員。公司會保密處理，也不得因你申訴而給予不利對待。請不要在 LINE 對話或群組談申訴內容。' }),
+      h('button', { text: '提出新的申訴', onclick: gate }), h('section', { class: 'card' }, h('h2', { text: '我的案件' }), list, err));
+    list.textContent = '載入中…';
+    call('cpNamedMine', idToken).then(function (cases) {
+      list.textContent = cases.length ? '' : '目前沒有案件。';
+      cases.forEach(function (c) {
+        list.appendChild(h('button', { class: 'row', onclick: function () { complainantCase(c); } }, h('strong', { text: c.caseId }), h('div', { text: c.category + '｜' + c.status }), h('div', { class: 'muted', text: '收件日期 ' + c.receivedDate })));
+      });
+    }).catch(function (e) { list.textContent = ''; err.textContent = e.message; });
+  }
+  function gate() {
+    screen(h('section', { class: 'card' }, h('h2', { text: '事件是否涉及 Vincent 或 Angela（含其親屬）？' }),
+      h('button', { class: 'alt', text: '是，有涉及', onclick: function () { screen(externalCard(info.external), h('button', { class: 'alt', text: '返回', onclick: complainantHome })); } }),
+      h('button', { text: '否，沒有涉及', onclick: complaintForm })));
+  }
+  function signaturePad() {
+    var c = h('canvas', { width: 600, height: 240 }), ctx = c.getContext('2d'), down = false, used = false;
+    ctx.lineWidth = 3; ctx.lineCap = 'round';
+    function at(e) { var r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; }
+    c.onpointerdown = function (e) { down = true; used = true; c.setPointerCapture(e.pointerId); var p = at(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]); };
+    c.onpointermove = function (e) { if (!down) return; var p = at(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); };
+    c.onpointerup = function () { down = false; };
+    return {
+      el: c,
+      clear: function () { ctx.clearRect(0, 0, c.width, c.height); used = false; },
+      b64: function () { return used ? c.toDataURL('image/png').split(',')[1] : ''; }
+    };
+  }
+  function complaintForm() {
+    var f = {
+      employer: options(info.employers.map(function (x) { return [x, x]; })),
+      name: h('input', { type: 'text', maxlength: 500, autocomplete: 'off' }), unit: h('input', { type: 'text', maxlength: 500 }),
+      address: h('input', { type: 'text', maxlength: 500 }), phone: h('input', { type: 'tel', maxlength: 50 }), agent: h('input', { type: 'text', maxlength: 500 }),
+      category: options(Object.keys(info.categories).map(function (k) { return [k, info.categories[k]]; })),
+      date: h('input', { type: 'date' }), time: h('input', { type: 'time' }), location: h('input', { type: 'text', maxlength: 500 }),
+      respondent: h('input', { type: 'text', maxlength: 500 }), narrative: h('textarea', { maxlength: 10000 }), witnesses: h('input', { type: 'text', maxlength: 500 }),
+      other: h('textarea', { maxlength: 10000 }), files: h('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true })
+    };
+    var pad = signaturePad(), err = h('div', { class: 'err', role: 'alert' });
+    var send = h('button', { text: '確認送出' });
+    send.onclick = function () {
+      var sig = pad.b64();
+      if (!sig) { err.textContent = '請簽名後再送出'; return; }
+      if (f.files.files.length > 5) { err.textContent = '最多 5 個檔案'; return; }
+      run(send, err, function () {
+        return call('cpNamedSubmit', idToken, {
+          involves_owners: false, employer_entity: f.employer.value, signature: { b64: sig },
+          identity: { complainant_name: f.name.value, unit_title: f.unit.value, address: f.address.value, phone: f.phone.value, agent_info: f.agent.value },
+          report: { category: f.category.value, incident_date: f.date.value, incident_time: f.time.value, location: f.location.value, respondent: f.respondent.value, narrative: f.narrative.value, witnesses: f.witnesses.value, other_info: f.other.value }
+        }).then(function (r) {
+          return uploadAll(f.files.files, function (b64) { return call('cpNamedUpload', idToken, r.caseId, { b64: b64 }); }).then(function (failed) {
+            screen(h('section', { class: 'card' }, h('h2', { text: '已收到你的申訴' }), h('p', { text: '案件編號：' + r.caseId }),
+              failed ? h('div', { class: 'err', text: failed + ' 個檔案未能上傳，請到案件頁面補傳。' }) : null,
+              h('p', { class: 'hint', text: '案件有進度時，LINE 會通知你開啟這個頁面查看。' }),
+              h('button', { class: 'alt', text: '回到我的案件', onclick: complainantHome })));
+          });
+        });
+      }, '送出中…');
+    };
+    screen(h('h1', { text: '具名正式申訴' }), h('section', { class: 'card' },
+      field('所屬公司', f.employer), field('姓名', f.name), field('服務單位及職稱', f.unit), field('住居所', f.address), field('聯絡電話', f.phone), field('代理人資料', f.agent, '可不填'),
+      field('申訴類別', f.category), field('事件日期', f.date, '可不填'), field('事件時間', f.time, '可不填'), field('地點', f.location, '可不填'), field('被申訴對象', f.respondent, '可不填'),
+      field('事件經過', f.narrative), field('證人資訊', f.witnesses, '可不填'), field('其他補充資料', f.other, '可不填'),
+      field('照片或文件', f.files, '最多 5 個，共 15 MB'),
+      h('label', { text: '簽名' }), pad.el, h('button', { class: 'alt', text: '重新簽名', onclick: pad.clear }), send, err,
+      h('button', { class: 'alt', text: '取消', onclick: complainantHome })));
+  }
+  function complainantCase(c) {
+    var updates = h('div'), text = h('textarea', { maxlength: 10000 }), files = h('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true }), err = h('div', { class: 'err', role: 'alert' });
+    c.updates.forEach(function (u) { updates.appendChild(h('p', { class: 'pre', text: u.date + '：' + u.note })); });
+    var send = h('button', { text: '送出補件' });
+    send.onclick = function () {
+      if (!text.value.trim() && !files.files.length) { err.textContent = '請輸入內容或選擇檔案'; return; }
+      run(send, err, function () {
+        return (text.value.trim() ? call('cpNamedSupplement', idToken, c.caseId, text.value) : Promise.resolve()).then(function () {
+          return uploadAll(files.files, function (b64) { return call('cpNamedUpload', idToken, c.caseId, { b64: b64 }); });
+        }).then(function (failed) {
+          if (failed) throw new Error(failed + ' 個檔案未能上傳');
+          complainantHome();
+        });
+      });
+    };
+    screen(h('section', { class: 'card' }, h('h2', { text: c.caseId }),
+      h('dl', null, h('dt', { text: '類別' }), h('dd', { text: c.category }), h('dt', { text: '目前狀態' }), h('dd', { text: c.status }), h('dt', { text: '收件日期' }), h('dd', { text: c.receivedDate }), h('dt', { text: '已補件／附件' }), h('dd', { text: c.supplements + ' 筆／' + c.attachments + ' 個' })),
+      c.updates.length ? h('h3', { text: '處理說明' }) : null, updates,
+      c.status.indexOf('迴避') < 0 && c.status !== '已結案' ? h('div', null, field('補件內容', text), field('補充照片或文件', files), send, err) : null,
+      h('button', { class: 'alt', text: '返回', onclick: complainantHome })));
+  }
+
+  /* ---------- administrators ---------- */
+  function adminHome() {
+    var list = h('div', { text: '載入中…' }), err = h('div', { class: 'err', role: 'alert' }), warn = h('div');
+    screen(h('h1', { text: '申訴案件管理' }), warn,
+      h('div', { class: 'tabs' }, h('button', { class: 'alt', text: '代建案件', onclick: adminCreate }), h('button', { class: 'alt', text: '操作紀錄', onclick: adminLog })),
+      h('section', { class: 'card' }, h('h2', { text: '案件' }), list, err));
+    call('cpAdminList', idToken).then(function (r) {
+      if (!r.logIntact) warn.appendChild(h('div', { class: 'note', text: '操作紀錄檢查未通過，可能遭到更動，請查看。' }));
+      if (r.failedNotices) warn.appendChild(h('div', { class: 'note', text: r.failedNotices + ' 則 LINE 通知發送失敗。' }));
+      list.textContent = r.cases.length ? '' : '目前沒有案件。';
+      r.cases.slice().reverse().forEach(function (c) {
+        list.appendChild(h('button', { class: 'row', disabled: c.status === 'recused', onclick: function () { adminCase(c.caseId); } },
+          h('strong', { text: c.caseId }), h('div', { text: [c.category, c.statusLabel].filter(String).join('｜') }),
+          h('div', { class: 'muted', text: '收件 ' + c.receivedDate + (c.dueDate ? '｜期限 ' + c.dueDate : '') + (c.employer ? '｜' + c.employer : '') })));
+      });
+    }).catch(function (e) { list.textContent = ''; err.textContent = e.message; });
+  }
+  function dl(pairs) {
+    var box = h('dl');
+    pairs.forEach(function (p) { if (p[1]) { box.appendChild(h('dt', { text: p[0] })); box.appendChild(h('dd', { text: p[1] })); } });
+    return box;
+  }
+  function adminCase(id) {
+    screen(h('p', { class: 'muted', text: '載入中…' }));
+    call('cpAdminCase', idToken, id).then(function (c) {
+      var d = c.details, who = c.identity, k = c.kase, err = h('div', { class: 'err', role: 'alert' });
+      var atts = h('div');
+      c.attachments.forEach(function (a) {
+        var slot = h('div'), b = h('button', { class: 'alt', text: (a.source === 'signature' ? '簽名' : '檔案') + '（' + a.mime + '，' + Math.round(a.size / 1024) + ' KB）' });
+        b.onclick = function () {
+          run(b, err, function () {
+            return call('cpAdminAttachment', idToken, id, a.id).then(function (f) {
+              var bytes = atob(f.b64), arr = new Uint8Array(bytes.length);
+              for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+              var url = URL.createObjectURL(new Blob([arr], { type: f.mime }));
+              slot.textContent = '';
+              if (f.mime.indexOf('image/') === 0) slot.appendChild(h('img', { class: 'ev', src: url, alt: '證據' }));
+              slot.appendChild(h('a', { href: url, download: id + '-' + a.id.slice(0, 6), text: '下載檔案' }));
+            });
+          }, '讀取中…');
+        };
+        atts.appendChild(b); atts.appendChild(slot);
+      });
+      var noteKind = options([['note', '處理紀錄'], ['protection', '保護措施'], ['finding', '調查結果']]), noteText = h('textarea', { maxlength: 10000 }), notePublic = h('input', { type: 'text', maxlength: 500 });
+      var noteBtn = h('button', { text: '儲存紀錄' });
+      noteBtn.onclick = function () { run(noteBtn, err, function () { return call('cpAdminAddNote', idToken, id, noteKind.value, noteText.value, notePublic.value).then(function () { adminCase(id); }); }); };
+      var nextSel = options(c.nextStatuses.map(function (s) { return [s.value, s.label]; })), statusNote = h('textarea', { maxlength: 10000 }), statusPublic = h('input', { type: 'text', maxlength: 500 });
+      var statusBtn = h('button', { text: '更新狀態' });
+      statusBtn.onclick = function () { if (!nextSel.value) { err.textContent = '請選擇狀態'; return; } run(statusBtn, err, function () { return call('cpAdminSetStatus', idToken, id, nextSel.value, statusNote.value, statusPublic.value).then(function () { adminCase(id); }); }); };
+      var extendBtn = h('button', { class: 'alt', text: '延長期限一個月' });
+      extendBtn.onclick = function () { var why = window.prompt('延長理由'); if (why) run(extendBtn, err, function () { return call('cpAdminExtend', idToken, id, why).then(function () { adminCase(id); }); }); };
+      var mark1 = h('button', { class: 'alt', text: k.authority_notified_at ? '已通報受理（' + k.authority_notified_at.slice(0, 10) + '）' : '標記：已通知／登錄主管機關', disabled: !!k.authority_notified_at });
+      mark1.onclick = function () { run(mark1, err, function () { return call('cpAdminMarkAuthority', idToken, id, 'received').then(function () { adminCase(id); }); }); };
+      var mark2 = h('button', { class: 'alt', text: k.result_notified_at ? '已通報結果（' + k.result_notified_at.slice(0, 10) + '）' : '標記：已通知／登錄處理結果', disabled: !!k.result_notified_at });
+      mark2.onclick = function () { run(mark2, err, function () { return call('cpAdminMarkAuthority', idToken, id, 'result').then(function () { adminCase(id); }); }); };
+      var recuse = h('button', { class: 'danger', text: '此案涉及管理員：迴避' });
+      recuse.onclick = function () {
+        var why = window.prompt('迴避後你們兩位都無法再開啟此案，申訴人會看到外部申訴管道。請填寫理由：');
+        if (why) run(recuse, err, function () { return call('cpAdminRecuse', idToken, id, why).then(adminHome); });
+      };
+      var evts = h('div');
+      c.events.slice().reverse().forEach(function (e) { evts.appendChild(h('p', { class: 'pre', text: String(e.at).slice(0, 16).replace('T', ' ') + '｜' + e.type + (e.to_status ? ' → ' + e.to_status : '') + (e.note ? '\n' + e.note : '') + (e.public_note ? '\n（對申訴人）' + e.public_note : '') })); });
+      var sup = h('div');
+      c.supplements.forEach(function (s) { sup.appendChild(h('p', { class: 'pre', text: String(s.created_at).slice(0, 10) + '：' + s.text })); });
+      screen(h('button', { class: 'alt', text: '回到案件清單', onclick: adminHome }),
+        h('section', { class: 'card' }, h('h2', { text: id }), dl([['類別', c.categoryLabel], ['狀態', c.statusLabel], ['收件方式', { named: '具名', anonymous: '匿名通報（非正式申訴）', admin_created: '代建' }[k.intake_type]], ['所屬公司', k.employer_entity], ['收件', k.received_at], ['受理', k.accepted_at], ['結案期限', k.extended_due_at || k.due_at], ['結案', k.closed_at]])),
+        who ? h('section', { class: 'card' }, h('h2', { text: '申訴人' }), dl([['姓名', who.complainant_name], ['服務單位及職稱', who.unit_title], ['住居所', who.address], ['聯絡電話', who.phone], ['代理人', who.agent_info], ['簽名時間', who.signed_at]])) : null,
+        h('section', { class: 'card' }, h('h2', { text: '事件內容' }), dl([['日期', d.incident_date], ['時間', d.incident_time], ['地點', d.location], ['被申訴對象', d.respondent], ['事件經過', d.narrative], ['證人', d.witnesses], ['其他', d.other_info]])),
+        c.supplements.length ? h('section', { class: 'card' }, h('h2', { text: '補件' }), sup) : null,
+        c.attachments.length ? h('section', { class: 'card' }, h('h2', { text: '證據' }), atts) : null,
+        k.status !== 'closed' ? h('section', { class: 'card' }, h('h2', { text: '新增紀錄' }), field('類型', noteKind), field('內容', noteText), field('對申訴人的說明', notePublic, '可不填；會顯示在對方的查詢頁'), noteBtn) : null,
+        c.nextStatuses.length ? h('section', { class: 'card' }, h('h2', { text: '更新狀態' }), field('新狀態', nextSel), field('內部紀錄', statusNote, '不予受理時必填'), field('對申訴人的說明', statusPublic, '可不填'), statusBtn) : null,
+        k.status !== 'closed' ? h('section', { class: 'card' }, h('h2', { text: '期限與主管機關' }), k.due_at && !k.extended_due_at ? extendBtn : null, mark1, mark2, recuse) : null,
+        err, h('section', { class: 'card' }, h('h2', { text: '處理過程' }), evts));
+    }).catch(function (e) {
+      screen(h('div', { class: 'err', text: e.message }), h('button', { class: 'alt', text: '回到案件清單', onclick: adminHome }));
+    });
+  }
+  function adminCreate() {
+    var f = {
+      channel: h('input', { type: 'text', maxlength: 500, placeholder: '例如 Email、書面、口頭' }), employer: options(info.employers.map(function (x) { return [x, x]; })),
+      name: h('input', { type: 'text', maxlength: 500 }), unit: h('input', { type: 'text', maxlength: 500 }), address: h('input', { type: 'text', maxlength: 500 }), phone: h('input', { type: 'tel', maxlength: 50 }),
+      category: options(Object.keys(info.categories).map(function (k) { return [k, info.categories[k]]; })), date: h('input', { type: 'date' }), location: h('input', { type: 'text', maxlength: 500 }), respondent: h('input', { type: 'text', maxlength: 500 }), narrative: h('textarea', { maxlength: 10000 })
+    };
+    var err = h('div', { class: 'err', role: 'alert' }), send = h('button', { text: '建立案件' });
+    send.onclick = function () {
+      run(send, err, function () {
+        return call('cpAdminCreateCase', idToken, { channel: f.channel.value, employer_entity: f.employer.value, identity: { complainant_name: f.name.value, unit_title: f.unit.value, address: f.address.value, phone: f.phone.value }, report: { category: f.category.value, incident_date: f.date.value, location: f.location.value, respondent: f.respondent.value, narrative: f.narrative.value } })
+          .then(function (r) { adminCase(r.caseId); });
+      });
+    };
+    screen(h('h1', { text: '代建案件' }), h('div', { class: 'note', text: '用於 Email、書面或口頭收到的申訴。口頭或 Email 申訴須作成紀錄，並請申訴人確認後簽名或蓋章，再把紀錄上傳到案件。' }),
+      h('section', { class: 'card' }, field('收件方式', f.channel), field('所屬公司', f.employer), field('申訴人姓名', f.name), field('服務單位及職稱', f.unit, '可不填'), field('住居所', f.address, '可不填'), field('聯絡電話', f.phone, '可不填'), field('類別', f.category), field('事件日期', f.date, '可不填'), field('地點', f.location, '可不填'), field('被申訴對象', f.respondent, '可不填'), field('事件經過', f.narrative), send, err,
+        h('button', { class: 'alt', text: '取消', onclick: adminHome })));
+  }
+  function adminLog() {
+    var box = h('div', { text: '載入中…' });
+    screen(h('button', { class: 'alt', text: '回到案件清單', onclick: adminHome }), h('section', { class: 'card' }, h('h2', { text: '操作紀錄（最新 100 筆）' }), box));
+    call('cpAdminLog', idToken, 100).then(function (r) {
+      box.textContent = '';
+      box.appendChild(h('p', { text: r.intact ? '紀錄完整性檢查：通過' : '紀錄完整性檢查：未通過，可能遭到更動' }));
+      r.rows.forEach(function (x) { box.appendChild(h('p', { class: 'muted pre', text: String(x.at).slice(0, 16).replace('T', ' ') + '｜' + x.actor + '｜' + x.action + (x.caseId ? '｜' + x.caseId : '') + (x.result !== 'ok' ? '｜' + x.result : '') })); });
+    }).catch(function (e) { box.textContent = e.message; });
+  }
+  function notAdmin(message) {
+    var show = h('div');
+    var b = h('button', { class: 'alt', text: '顯示我的 LINE ID（設定管理員時使用）' });
+    b.onclick = function () { call('cpWhoAmI', idToken).then(function (r) { show.textContent = r.userId; }).catch(function (e) { show.textContent = e.message; }); };
+    screen(h('section', { class: 'card' }, h('h2', { text: message }), b, h('p', { class: 'pre' }, show)));
+  }
+
+  /* ---------- start ---------- */
+  function view() {
+    var q = new URLSearchParams(location.search);
+    var st = q.get('liff.state');
+    return st ? new URLSearchParams(st.replace(/^[^?]*\??/, '')).get('view') : q.get('view');
+  }
+  liff.init({ liffId: LIFF_ID }).then(function () {
+    if (!liff.isLoggedIn()) { liff.login(); return null; }
+    idToken = liff.getIDToken();
+    return call('cpPublicInfo');
+  }).then(function (i) {
+    if (!i) return;
+    info = i;
+    if (i.env !== 'PROD') document.getElementById('envBanner').hidden = false;
+    if (view() === 'admin') {
+      call('cpAdminPing', idToken).then(adminHome).catch(function (e) { notAdmin(e.message); });
+    } else {
+      complainantHome();
+    }
+  }).catch(function (e) {
+    screen(h('div', { class: 'err', text: '無法開啟：' + (e.message || '請從 LINE 重新開啟') }));
+  });
+})();
+</script>
+</body>
+</html>
