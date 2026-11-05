@@ -108,18 +108,13 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
       });
     }, Promise.resolve()).then(function () { return failed; });
   }
-  function externalCard(ext) {
-    var list = h('div');
-    ext.channels.forEach(function (c) { list.appendChild(h('p', { text: c.name + '：' + c.phone + (c.address ? '（' + c.address + '）' : '') })); });
-    return h('section', { class: 'card' }, h('h2', { text: '請直接向主管機關申訴' }), h('p', { text: ext.note }), list, h('p', { class: 'hint', text: '你沒有送出任何內容，本系統也沒有保存任何資料。' }));
-  }
 
   /* ---------- complainant ---------- */
   function complainantHome() {
     var err = h('div', { class: 'err', role: 'alert' }), list = h('div');
     screen(h('h1', { text: '具名正式申訴' }),
-      h('div', { class: 'note', text: '資料由 Vincent 持有，Vincent 與 Angela 為處理人員。公司會保密處理，也不得因你申訴而給予不利對待。請不要在 LINE 對話或群組談申訴內容。' }),
-      h('button', { text: '提出新的申訴', onclick: gate }), h('section', { class: 'card' }, h('h2', { text: '我的案件' }), list, err));
+      h('div', { class: 'note', text: '公司會保密處理，也不得因你申訴而給予不利對待。請不要在 LINE 對話或群組談申訴內容。' }),
+      h('button', { text: '提出新的申訴', onclick: complaintForm }), h('section', { class: 'card' }, h('h2', { text: '我的案件' }), list, err));
     list.textContent = '載入中…';
     call('cpNamedMine', idToken).then(function (cases) {
       list.textContent = cases.length ? '' : '目前沒有案件。';
@@ -127,11 +122,6 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
         list.appendChild(h('button', { class: 'row', onclick: function () { complainantCase(c); } }, h('strong', { text: c.caseId }), h('div', { text: c.category + '｜' + c.status }), h('div', { class: 'muted', text: '收件日期 ' + c.receivedDate })));
       });
     }).catch(function (e) { list.textContent = ''; err.textContent = e.message; });
-  }
-  function gate() {
-    screen(h('section', { class: 'card' }, h('h2', { text: '事件是否涉及 Vincent 或 Angela（含其親屬）？' }),
-      h('button', { class: 'alt', text: '是，有涉及', onclick: function () { screen(externalCard(info.external), h('button', { class: 'alt', text: '返回', onclick: complainantHome })); } }),
-      h('button', { text: '否，沒有涉及', onclick: complaintForm })));
   }
   function signaturePad() {
     var c = h('canvas', { width: 600, height: 240 }), ctx = c.getContext('2d'), down = false, used = false;
@@ -164,7 +154,7 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
       if (f.files.files.length > 5) { err.textContent = '最多 5 個檔案'; return; }
       run(send, err, function () {
         return call('cpNamedSubmit', idToken, {
-          involves_owners: false, employer_entity: f.employer.value, signature: { b64: sig },
+          employer_entity: f.employer.value, signature: { b64: sig },
           identity: { complainant_name: f.name.value, unit_title: f.unit.value, address: f.address.value, phone: f.phone.value, agent_info: f.agent.value },
           report: { category: f.category.value, incident_date: f.date.value, incident_time: f.time.value, location: f.location.value, respondent: f.respondent.value, narrative: f.narrative.value, witnesses: f.witnesses.value, other_info: f.other.value }
         }).then(function (r) {
@@ -203,7 +193,7 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
     screen(h('section', { class: 'card' }, h('h2', { text: c.caseId }),
       h('dl', null, h('dt', { text: '類別' }), h('dd', { text: c.category }), h('dt', { text: '目前狀態' }), h('dd', { text: c.status }), h('dt', { text: '收件日期' }), h('dd', { text: c.receivedDate }), h('dt', { text: '已補件／附件' }), h('dd', { text: c.supplements + ' 筆／' + c.attachments + ' 個' })),
       c.updates.length ? h('h3', { text: '處理說明' }) : null, updates,
-      c.status.indexOf('迴避') < 0 && c.status !== '已結案' ? h('div', null, field('補件內容', text), field('補充照片或文件', files), send, err) : null,
+      c.status.indexOf('主管機關') < 0 && c.status !== '已結案' ? h('div', null, field('補件內容', text), field('補充照片或文件', files), send, err) : null,
       h('button', { class: 'alt', text: '返回', onclick: complainantHome })));
   }
 
@@ -267,9 +257,9 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
       mark1.onclick = function () { run(mark1, err, function () { return call('cpAdminMarkAuthority', idToken, id, 'received').then(function () { adminCase(id); }); }); };
       var mark2 = h('button', { class: 'alt', text: k.result_notified_at ? '已通報結果（' + k.result_notified_at.slice(0, 10) + '）' : '標記：已通知／登錄處理結果', disabled: !!k.result_notified_at });
       mark2.onclick = function () { run(mark2, err, function () { return call('cpAdminMarkAuthority', idToken, id, 'result').then(function () { adminCase(id); }); }); };
-      var recuse = h('button', { class: 'danger', text: '此案涉及管理員：迴避' });
+      var recuse = h('button', { class: 'danger', text: '此案須迴避' });
       recuse.onclick = function () {
-        var why = window.prompt('迴避後你們兩位都無法再開啟此案，申訴人會看到外部申訴管道。請填寫理由：');
+        var why = window.prompt('迴避後管理員都無法再開啟此案，申訴人會看到向主管機關申訴的資訊。請填寫理由：');
         if (why) run(recuse, err, function () { return call('cpAdminRecuse', idToken, id, why).then(adminHome); });
       };
       var evts = h('div');

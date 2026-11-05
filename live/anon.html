@@ -42,26 +42,13 @@ dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;font
     <ul>
       <li>這是<strong>通報，不是正式申訴</strong>。公司知悉後會處理，但可能無法完成完整調查，也不一定會作成正式決定。</li>
       <li>本頁不要求 LINE 身分，也不會保存姓名或 LINE 帳號。</li>
-      <li>資料由 Vincent 持有並可查看。事件細節、用字或附件內容仍可能讓人認出你，請自行斟酌。</li>
+      <li>事件細節、用字或附件內容仍可能讓人認出你，請自行斟酌。</li>
       <li>Google 與 GitHub 身為服務商會有技術連線紀錄，但本系統與公司取不到。</li>
       <li>請不要在 LINE 對話或群組討論申訴內容。</li>
     </ul>
   </div>
   <button id="goReport">我要匿名通報</button>
   <button id="goQuery" class="alt">查詢案件／補件</button>
-</section>
-
-<section id="gate" class="card" hidden>
-  <h2>事件是否涉及 Vincent 或 Angela（含其親屬）？</h2>
-  <button id="gateYes" class="alt">是，有涉及</button>
-  <button id="gateNo">否，沒有涉及</button>
-</section>
-
-<section id="external" class="card" hidden>
-  <h2>請直接向主管機關申訴</h2>
-  <p id="extNote"></p>
-  <div id="extList"></div>
-  <p class="hint">你剛才沒有送出任何內容，本系統也沒有保存任何資料。</p>
 </section>
 
 <section id="report" class="card" hidden>
@@ -137,7 +124,7 @@ dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;font
   'use strict';
   var API_URL = 'https://script.google.com/macros/s/AKfycbwESdfI6f9HzfewYF9n3iaKnh1SpQmMAsT2GyZR3fEInoXcllsvpZiEiIEwDcAm01AU/exec';
   var $ = function (id) { return document.getElementById(id); };
-  var SECTIONS = ['home', 'gate', 'external', 'report', 'done', 'query', 'status'];
+  var SECTIONS = ['home', 'report', 'done', 'query', 'status'];
   var session = '';
 
   function show(id) {
@@ -216,32 +203,13 @@ dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;font
     if (text) { btn.dataset.label = btn.textContent; btn.textContent = text; }
     else if (btn.dataset.label) btn.textContent = btn.dataset.label;
   }
-  function renderExternal(ext) {
-    $('extNote').textContent = ext.note;
-    var box = $('extList'); box.textContent = '';
-    ext.channels.forEach(function (c) {
-      var d = document.createElement('dl');
-      var t = document.createElement('dt'); t.textContent = c.name;
-      var v = document.createElement('dd'); v.textContent = c.phone + (c.address ? '（' + c.address + '）' : '');
-      d.appendChild(t); d.appendChild(v); box.appendChild(d);
-    });
-  }
-
-  $('goReport').onclick = function () { show('gate'); };
+  $('goReport').onclick = function () { show('report'); };
   $('goQuery').onclick = function () { show('query'); };
   $('doneQuery').onclick = function () { show('query'); };
-  $('gateNo').onclick = function () { show('report'); };
-  $('gateYes').onclick = function () {
-    call('cpPublicInfo').then(function (i) { renderExternal(i.external); show('external'); })
-      .catch(function () {
-        renderExternal({ note: '請直接向主管機關申訴。', channels: [{ name: '桃園市政府勞動局', phone: '03-3322101' }, { name: '勞工諮詢申訴專線', phone: '1955' }] });
-        show('external');
-      });
-  };
 
   $('submit').onclick = function () {
     var btn = this, err = $('reportErr'); err.textContent = '';
-    var input = { involves_owners: false, website: $('website').value };
+    var input = { website: $('website').value };
     ['category', 'incident_date', 'incident_time', 'location', 'respondent', 'narrative', 'witnesses', 'other_info'].forEach(function (k) { input[k] = $(k).value; });
     if (!input.category) { err.textContent = '請選擇類別'; return; }
     if (input.narrative.trim().length < 10) { err.textContent = '請描述事件經過（至少 10 個字）'; return; }
