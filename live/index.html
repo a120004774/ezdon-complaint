@@ -51,16 +51,5 @@ ul{margin:6px 0 0;padding-left:20px}
   <p>也可以用 Email、書面或口頭提出。Email：vinsh_1972@hotmail.com</p>
 </div>
 </main>
-<script>
-// 從 EZDonHR 離職申請頁進來時帶 ?cat=forced_resignation：把類別傳給具名與匿名表單（只帶類別，不帶任何個人資料）
-(function () {
-  var cat = new URLSearchParams(location.search).get('cat');
-  if (!/^[a-z_]{3,40}$/.test(cat || '')) return;
-  Array.prototype.forEach.call(document.querySelectorAll('a[href]'), function (a) {
-    var h = a.getAttribute('href');
-    if (h.indexOf('liff.line.me') >= 0 || h === 'anon.html') a.setAttribute('href', h + (h.indexOf('?') >= 0 ? '&' : '?') + 'cat=' + cat);
-  });
-})();
-</script>
 </body>
 </html>
