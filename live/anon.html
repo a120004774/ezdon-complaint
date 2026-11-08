@@ -59,6 +59,7 @@ dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;font
     <option value="sexual_harassment">職場性騷擾</option>
     <option value="bullying">職場霸凌</option>
     <option value="other_violation">其他職場不法侵害</option>
+    <option value="forced_resignation">離職爭議／被迫離職</option>
   </select>
   <label for="incident_date">事件日期 <span class="hint">可不填</span></label>
   <input id="incident_date" type="date">
@@ -126,6 +127,11 @@ dl{margin:0}dt{color:var(--muted);font-size:14px;margin-top:8px}dd{margin:0;font
   var $ = function (id) { return document.getElementById(id); };
   var SECTIONS = ['home', 'report', 'done', 'query', 'status'];
   var session = '';
+  // 網址帶 ?cat= 時預選類別（例如從離職申請頁進來）
+  (function () {
+    var cat = new URLSearchParams(location.search).get('cat'), sel = $('category');
+    if (cat && sel && Array.prototype.some.call(sel.options, function (o) { return o.value === cat; })) sel.value = cat;
+  })();
 
   function show(id) {
     SECTIONS.forEach(function (s) { $(s).hidden = s !== id; });

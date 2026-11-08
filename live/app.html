@@ -146,6 +146,12 @@ img.ev{display:block;max-width:100%;margin-top:8px;border:1px solid var(--line);
       respondent: h('input', { type: 'text', maxlength: 500 }), narrative: h('textarea', { maxlength: 10000 }), witnesses: h('input', { type: 'text', maxlength: 500 }),
       other: h('textarea', { maxlength: 10000 }), files: h('input', { type: 'file', accept: 'image/*,application/pdf', multiple: true })
     };
+    // 網址帶 cat（例如從 EZDonHR 離職申請頁進來）時預選類別；只帶類別，不帶任何個人資料
+    (function () {
+      var q = new URLSearchParams(location.search), st = q.get('liff.state');
+      var cat = st ? new URLSearchParams(st.replace(/^[^?]*\??/, '')).get('cat') : q.get('cat');
+      if (cat && Object.prototype.hasOwnProperty.call(info.categories, cat)) f.category.value = cat;
+    })();
     var pad = signaturePad(), err = h('div', { class: 'err', role: 'alert' });
     var send = h('button', { text: '確認送出' });
     send.onclick = function () {
